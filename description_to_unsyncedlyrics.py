@@ -6,8 +6,7 @@
 
 import logging
 import gpodder
-from mutagen import File
-from mutagen.easyid3 import EasyID3
+from mutagen.id3 import ID3, USLT, ID3NoHeaderError
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +16,14 @@ __description__ = _('Copies the podcast description if it exists to the "unsynce
 __authors__ = "axberu <no@thank.you>"
 __category__ = "post-download"
 
+
 class gPodderExtension:
     def __init__(self, container):
         self.container = container
 
     def on_episode_downloaded(self, episode):
-        desc = f"{episode._text_description}".replace('\\n','\n') # for some rason f-strings only escape \n on prints
+        desc = episode._text_description
+        # desc = f"{episode._text_description}".replace('\\n','\n') # for some rason f-strings only escape \n on prints
         if not desc:
             logger.info("LYRDESC: No description for the episode")
             return
@@ -34,19 +35,15 @@ class gPodderExtension:
             logger.warning("LYRDESC: Filename not found")
             return
 
-        logger.debug(f"LYRDESC: Opening {filename} as mutagen File")
-        audio = File(filename, easy=True)
-        if not audio:
-            logger.warning(f"LYRDESC: Couldn't open {filename} for writing")
-            return
-
-        if audio.tags is None:
-            logger.debug("LYRDESC: No tags on file, calling add_tags")
-            audio.add_tags()
+        logger.debug(f"LYRDESC: Opening {filename} as mutagen ID3")
+        try:
+            audio = ID3(filename)
+        except ID3NoHeaderError:
+            audio = ID3()
 
         logger.debug(f"LYRDESC: Adding USLT tag with description")
-        EasyID3.RegisterTextKey("UNSYNCED LYRICS", "USLT")
-        audio.tags['UNSYNCED LYRICS'] = desc
+        audio.delall("USLT")
+        audio.add(USLT(text=desc, lang="eng", desc=""))
 
         logger.debug("LYRDESC: Saving file")
-        audio.save()
+        audio.save(filename)
